@@ -1,0 +1,5 @@
+gcc {
+    gcc %i -o %o
+}
+
+main.c => main: gcc
