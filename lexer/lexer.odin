@@ -133,7 +133,7 @@ error :: proc(l: ^Lexer, pos: int, format: string, args: ..any) {
 
 next_ch :: proc(l: ^Lexer) {
 	if l.peek_pos < len(l.input) {
-        l.pos = l.peek_pos
+		l.pos = l.peek_pos
 		if l.ch == '\n' {
 			l.last_line_pos = l.pos
 			l.line += 1
@@ -163,33 +163,86 @@ next_ch :: proc(l: ^Lexer) {
 }
 
 peek_byte :: proc(l: ^Lexer) -> byte {
-    if l.peek_pos < len(l.input) {
-        return l.input[l.peek_pos]
+	if l.peek_pos < len(l.input) {
+		return l.input[l.peek_pos]
+	}
+	return 0
+}
+
+is_char :: proc(ch: rune) -> bool {
+	return ('a' <= ch && ch <= 'z') || ('A' <= ch && ch <= 'Z')
+}
+
+is_identifier_ch :: proc(ch: rune) -> bool {
+	return is_char(ch) || ch == '_' || ('0' <= ch && ch <= '9')
+}
+
+is_whitespace :: proc(ch: rune) -> bool {
+	return ch == ' ' || ch == '\r' || ch == '\n' || ch == '\t'
+}
+
+read_identifier :: proc(l: ^Lexer, loc: Loc) -> Token {
+	start_pos := l.pos
+
+	type := Token_Type.Identifier
+	for is_identifier_ch(l.ch) {
+		next_ch(l)
+	}
+
+	if !is_whitespace(l.ch) {
+		type = .File
+		for !is_whitespace(l.ch) {
+			next_ch(l)
+		}
+	}
+
+	return Token{type = type, loc = loc, data = strings.clone(l.input[start_pos:l.pos])}
+}
+
+read_command :: proc(l: ^Lexer, loc: Loc) -> Token {
+
+    if l.ch == '$' {
+        next_ch(l)
     }
-    return 0
+    start_pos := l.pos
+
+    for l.ch != '\n' {
+        if l.ch == '\r' && peek_byte(l) == '\n' {
+            end_pos := l.pos
+            next_ch(l)
+            return Token{type = .Command, loc = loc, data = strings.clone(l.input[start_pos:end_pos])}
+        }
+    }
+    return Token{type = .Command, loc = loc, data = strings.clone(l.input[start_pos:l.pos])}
+}
+
+skip_whitespace :: proc(l: ^Lexer) {
+	for is_whitespace(l.ch) {next_ch(l)}
 }
 
 next_token :: proc(l: ^Lexer) -> Token {
+	skip_whitespace(l)
 	type := Token_Type.Invalid
 	loc := pos_to_loc(l, l.pos)
 
-    switch l.ch {
-    case -1: type = .EOF
-    case '=': 
-        if peek_byte(l) == '>' {
-            next_ch(l)
-            type = .Arrow
-        }
-    case '{': type = .OpenBrace
-    case '}': type = .CloseBrace
-    case ':': type = .Colon
-    case:
-        
-    }
-    next_ch(l)
-	return Token{
-        loc = loc,
-        type = type,
-        data = nil,
-    }
+	switch l.ch {
+	case -1:
+		type = .EOF
+	case '=':
+		if peek_byte(l) == '>' {
+			next_ch(l)
+			type = .Arrow
+		}
+	case '{':
+		type = .OpenBrace
+	case '}':
+		type = .CloseBrace
+	case ':':
+		type = .Colon
+	case '$': // TODO(robin): commands
+	case:
+
+	}
+	next_ch(l)
+	return Token{loc = loc, type = type, data = nil}
 }
